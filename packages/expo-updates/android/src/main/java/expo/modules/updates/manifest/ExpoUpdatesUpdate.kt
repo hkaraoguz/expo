@@ -11,10 +11,10 @@ import expo.modules.updates.db.entity.UpdateEntity
 import expo.modules.updates.loader.EmbeddedLoader
 import expo.modules.manifests.core.ExpoUpdatesManifest
 import expo.modules.updates.db.enums.UpdateStatus
+import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 import org.json.JSONArray
 import org.json.JSONException
 import org.json.JSONObject
-import java.net.URI
 import java.text.ParseException
 import java.util.*
 
@@ -140,11 +140,11 @@ class ExpoUpdatesUpdate private constructor(
     }
 
     private fun resolveUrl(url: String, baseUrl: Uri): String {
-      return try {
-        URI(baseUrl.toString()).resolve(url).toString()
-      } catch (e: Exception) {
-        url
-      }
+      // Resolve with OkHttp rather than java.net.URI: Android's URI.resolve does not insert the
+      // path separator when the base URL has an empty path (a dev server URL typed without a
+      // trailing slash, e.g. `http://192.168.1.2:8081`), which would splice the first path segment
+      // onto the port and make the authority unparseable.
+      return baseUrl.toString().toHttpUrlOrNull()?.resolve(url)?.toString() ?: url
     }
   }
 }

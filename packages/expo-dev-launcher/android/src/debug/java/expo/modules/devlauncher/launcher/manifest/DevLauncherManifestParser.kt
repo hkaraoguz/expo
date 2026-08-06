@@ -6,11 +6,11 @@ import expo.modules.devlauncher.helpers.fetch
 import expo.modules.manifests.core.Manifest
 import okhttp3.Headers
 import okhttp3.Headers.Companion.toHeaders
+import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 import okhttp3.OkHttpClient
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.Reader
-import java.net.URI
 
 class DevLauncherManifestParser(
   private val httpClient: OkHttpClient,
@@ -62,11 +62,11 @@ class DevLauncherManifestParser(
   }
 
   private fun resolveUrl(rawUrl: String): String {
-    return try {
-      URI(url.toString()).resolve(rawUrl).toString()
-    } catch (e: Exception) {
-      rawUrl
-    }
+    // Resolve with OkHttp rather than java.net.URI: Android's URI.resolve does not insert the path
+    // separator when the base URL has an empty path (a dev server URL typed without a trailing
+    // slash, e.g. `http://192.168.1.2:8081`), which would splice the first path segment onto the
+    // port and make the authority unparseable.
+    return url.toString().toHttpUrlOrNull()?.resolve(rawUrl)?.toString() ?: rawUrl
   }
 
   private fun getHeaders(): Headers {
