@@ -8,7 +8,7 @@ import {
   type TabNavigationState,
   type TabRouterOptions,
 } from '../../react-navigation/routers';
-import { renderRouter } from '../../testing-library';
+import { act, renderRouter } from '../../testing-library';
 import { unstable_createStandardRouterNavigator } from '../index';
 
 // Integration: useBuildHref through the real useStateForPath → getCachedRouteInfo pipeline, resolving
@@ -52,6 +52,8 @@ describe('useBuildHref (integration)', () => {
         Record<string, never>,
         Record<string, never>
       >;
+
+    act(() => lastArgs().actions.navigate('(group)/feed'));
 
     expect(
       lastArgs()

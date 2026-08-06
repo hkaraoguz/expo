@@ -190,13 +190,18 @@ export function unstable_integrateWithRouter<
 
     const { dispatch } = navigation;
 
+    const processedState = useMemo(
+      () => options?.processState?.(state, descriptors) ?? state,
+      [state, descriptors]
+    );
+
     const derivedProps = useMemo<Partial<CreateProps>>(
-      () => options?.createProps?.({ state, dispatch, navigation }) ?? {},
-      [state, dispatch, navigation, options]
+      () => options?.createProps?.({ state: processedState, dispatch, navigation }) ?? {},
+      [processedState, dispatch, navigation, options]
     );
 
     const standardArgs: NavigatorArgs<NavigatorOptions, EventMap> = {
-      state: useStandardState(state),
+      state: useStandardState(processedState),
       descriptors,
       actions: useStandardActions(navigation, state.key),
       emitter: useStandardEmitter(navigation),

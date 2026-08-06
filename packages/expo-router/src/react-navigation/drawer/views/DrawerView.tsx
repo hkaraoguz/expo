@@ -210,8 +210,11 @@ function DrawerViewBase({
           const isFocused = state.index === index;
           const isPreloaded = state.preloadedRouteKeys.includes(route.key);
 
-          if (lazy && !loaded.includes(route.key) && !isFocused && !isPreloaded) {
-            // Don't render a lazy screen if we've never navigated to it or it wasn't preloaded
+          if (
+            descriptor.route.key === undefined ||
+            (lazy && !loaded.includes(route.key) && !isFocused && !isPreloaded)
+          ) {
+            // Don't render placeholder or unloaded lazy screens.
             return null;
           }
 
@@ -242,7 +245,7 @@ function DrawerViewBase({
 
           return (
             <MaybeScreen
-              key={route.key}
+              key={route.name}
               style={[StyleSheet.absoluteFill, { zIndex: isFocused ? 0 : -1 }]}
               visible={isFocused}
               enabled={detachInactiveScreens}

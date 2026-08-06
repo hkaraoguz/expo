@@ -254,17 +254,36 @@ export function useDescriptors<
     );
   };
 
-  const descriptors = cachedRoutes.reduce<
-    Record<
-      string,
-      Descriptor<
-        ScreenOptions,
-        NavigationProp<ParamListBase, string, string | undefined, State, ScreenOptions, EventMap> &
-          ActionHelpers,
-        RouteProp<ParamListBase>
-      >
+  type DescriptorMap = Record<
+    string,
+    Descriptor<
+      ScreenOptions,
+      NavigationProp<ParamListBase, string, string | undefined, State, ScreenOptions, EventMap> &
+        ActionHelpers,
+      RouteProp<ParamListBase>
     >
-  >((acc, route, i) => {
+  >;
+
+  const placeholderDescriptors = Object.entries(screens).reduce<DescriptorMap>(
+    (acc, [name, config]) => {
+      const route = {
+        key: undefined,
+        name,
+        params: config.props.initialParams,
+      };
+
+      acc[name] = {
+        route,
+        options: getOptions(route, undefined, {}),
+        render: () => null,
+        routeSource: config.props.routeSource,
+      } as DescriptorMap[string];
+      return acc;
+    },
+    {}
+  );
+
+  const routeDescriptors = cachedRoutes.reduce<DescriptorMap>((acc, route, i) => {
     const navigation = navigations[route.key]!;
 
     if (screens[route.name] === undefined) {
@@ -295,6 +314,8 @@ export function useDescriptors<
 
     return acc;
   }, {});
+
+  const descriptors = { ...placeholderDescriptors, ...routeDescriptors };
 
   return descriptors;
 }

@@ -30,7 +30,7 @@ const Probe = unstable_createStandardRouterNavigator<
 function descriptorByRouteName(name: string): StandardNavigatorDescriptor<object> | undefined {
   const { state, descriptors } = probeContent.mock.calls.at(-1)![0];
   const route = state.routes.find((route) => route.name === name);
-  return route ? (descriptors[route.key] as StandardNavigatorDescriptor<object>) : undefined;
+  return descriptors[route?.key ?? name] as StandardNavigatorDescriptor<object> | undefined;
 }
 
 beforeEach(() => {

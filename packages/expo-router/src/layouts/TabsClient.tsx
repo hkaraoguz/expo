@@ -21,6 +21,7 @@ import {
   type TabRouterOptions,
 } from '../react-navigation/native';
 import { unstable_integrateWithRouter } from '../standard-navigation';
+import { includePlaceholderRoutes } from '../standard-navigation/includePlaceholderRoutes';
 import type { Href } from '../types';
 
 // Keep React Navigation client-only so the entry evaluates in React Server Components.
@@ -44,9 +45,11 @@ const Tabs = unstable_integrateWithRouter<
   TabRouterOptions,
   BottomTabNavigatorCreateProps
 >(createStandardBottomTabNavigator, TabRouter, {
+  processState: includePlaceholderRoutes,
   createProps: ({ state, dispatch }) => ({
     routeNames: state.routeNames,
     preloadedRouteKeys: state.preloadedRouteKeys,
+    preload: (name) => dispatch({ type: 'PRELOAD', payload: { name } }),
     popNestedStackToTop: (routeKey) => {
       const nestedState = state.routes.find((route) => route.key === routeKey)?.state;
       if (nestedState?.type === 'stack' && nestedState.key) {

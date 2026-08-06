@@ -4,20 +4,22 @@ import { useRouteNode } from '../Route';
 import { router } from '../imperative-api';
 import { normalizeRouteName, useGuardRedirect } from '../layouts/GuardContext';
 import {
-  type NavigationRoute,
+  type Descriptor,
+  type DescriptorRouteProp,
   type ParamListBase,
-  type RouteSource,
+  type RouteProp,
   useIsFocused,
 } from '../react-navigation/native';
 import { orderRoutesByRouteNames } from '../utils/orderRoutesByRouteNames';
+import type { StandardNavigatorDescriptor } from './types';
 import { useBuildHref } from './useBuildHref';
 
-type TabRoute = NavigationRoute<ParamListBase, string>;
+export type TabRoute = DescriptorRouteProp<ParamListBase, string>;
 
-type TabDescriptor<Options extends object> = {
-  routeSource?: RouteSource;
-  options?: Options;
-};
+export type TabDescriptor<Options extends object> = Partial<
+  Pick<StandardNavigatorDescriptor<Options>, 'routeSource' | 'options' | 'render'> &
+    Pick<Descriptor<Options, never, RouteProp<ParamListBase, string>>, 'route'>
+>;
 
 /**
  * Returns the visible layout tabs and their focused index. When the navigator is focused, redirects
@@ -45,10 +47,25 @@ export function useVisibleTabsWithRedirect<
 
   const visibleRoutes = useMemo(
     () =>
-      orderRoutesByRouteNames(routes, routeNames).filter((route) => {
+      orderRoutesByRouteNames(
+        [
+          ...routeNames
+            .filter((name) => !routes.some((r) => r.name === name))
+            .map((name) => ({
+              key: undefined,
+              name,
+              params: descriptors[name]?.route?.params,
+            })),
+          ...routes,
+        ],
+        routeNames
+      ).filter((route): route is Route => {
         // Every filesystem route is registered in state; only routes declared by a non-hidden
         // trigger become tab items.
-        const descriptor = descriptors[route.key];
+        if (!route) {
+          return false;
+        }
+        const descriptor = descriptors[route.key ?? route.name];
         return isDeclaredInLayout(descriptor) && descriptor?.options?.hidden !== true;
       }),
     [routes, routeNames, descriptors]
@@ -57,7 +74,7 @@ export function useVisibleTabsWithRedirect<
     () => visibleRoutes.findIndex((route) => route.key === focusedRouteKey),
     [focusedRouteKey, visibleRoutes]
   );
-  const focusedIndex = visibleFocusedIndex >= 0 ? visibleFocusedIndex : 0;
+  const focusedIndex = visibleFocusedIndex;
 
   const redirectHref = useMemo(() => {
     if (guardRedirect !== undefined) {
@@ -75,7 +92,7 @@ export function useVisibleTabsWithRedirect<
     // TODO(@ubax): Consider throwing in __DEV__ instead of warning.
     if (__DEV__ && visibleRoutes.length === 0 && guardRedirect === undefined) {
       const undeclaredRoutes = routes
-        .filter((route) => !isDeclaredInLayout(descriptors[route.key]))
+        .filter((route) => route.key && !isDeclaredInLayout(descriptors[route.key]))
         .map((route) => route.name)
         .join(', ');
       console.warn(

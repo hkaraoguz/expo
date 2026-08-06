@@ -14,6 +14,50 @@ beforeEach(() => {
   MockRouterKey.current = 0;
 });
 
+test('creates route name descriptors for absent routes in every navigator', () => {
+  function SparseRouter(options: DefaultRouterOptions) {
+    const router = MockRouter(options);
+
+    return {
+      ...router,
+      getInitialState(config: Parameters<typeof router.getInitialState>[0]) {
+        const state = router.getInitialState(config);
+        return { ...state, routes: state.routes.slice(0, 1) };
+      },
+    };
+  }
+
+  let result: ReturnType<typeof useNavigationBuilder>['descriptors'];
+
+  const TestNavigator = (props: any) => {
+    const { descriptors } = useNavigationBuilder(SparseRouter, props);
+    result = descriptors;
+    return null;
+  };
+
+  render(
+    <BaseNavigationContainer>
+      <TestNavigator>
+        <Screen name="foo" component={React.Fragment} options={{ title: 'Foo' }} />
+        <Screen name="bar" component={React.Fragment} options={{ title: 'Bar' }} />
+      </TestNavigator>
+    </BaseNavigationContainer>
+  );
+
+  expect(result!.foo).toMatchObject({
+    route: { key: 'foo', name: 'foo' },
+    options: { title: 'Foo' },
+  });
+  expect(result!.foo!.render()).not.toBeNull();
+  expect(result!.foo).toHaveProperty('navigation');
+  expect(result!.bar).toMatchObject({
+    route: { key: undefined, name: 'bar' },
+    options: { title: 'Bar' },
+  });
+  expect(result!.bar!.render()).toBeNull();
+  expect(result!.bar).not.toHaveProperty('navigation');
+});
+
 test('sets options with options prop as an object', () => {
   const TestNavigator = (props: any) => {
     const { state, descriptors, NavigationContent } = useNavigationBuilder<

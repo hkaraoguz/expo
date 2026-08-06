@@ -54,9 +54,9 @@ export interface StandardNavigatorCreatePropsFactoryDeps<State extends Navigatio
  * Allows router-specific information to be exposed via navigator props alongside the standard
  * `state` and `actions`.
  *
- * Receives the raw Expo Router `state` and `dispatch`. Both are internal and may have small
- * breaking changes between releases, so prefer the `state` and `actions` passed to
- * `NavigatorContent` when they suffice.
+ * Receives the processed Expo Router `state` and raw `dispatch`. Both are internal and may have
+ * small breaking changes between releases, so prefer the `state` and `actions` passed to
+ * `NavigatorContent` when they suffice. When `processState` is provided, `state` is its result.
  *
  * @example
  * ```tsx
@@ -88,6 +88,33 @@ export type IntegrateWithRouterOptions<
   NavigatorOptions extends object = Record<string, any>,
   EventMap extends EventMapBase = EventMapBase,
 > = CreatePropsOption<State, CreateProps> & {
+  /**
+   * Pre-processes the builder state before it is converted to standard-navigation state.
+   *
+   * @example
+   * ```tsx
+   * processState: (state, descriptors) => {
+   *   const focusedKey = state.routes[state.index]?.key;
+   *   const routes = state.routeNames.map((name) => {
+   *     const route = state.routes.find((route) => route.name === name) ?? descriptors[name]?.route;
+   *     return { ...route, key: route?.key ?? name, name };
+   *   });
+   *
+   *   return {
+   *     ...state,
+   *     index: Math.max(0, routes.findIndex((route) => route.key === focusedKey)),
+   *     routes,
+   *   };
+   * }
+   * ```
+   */
+  processState?: (
+    state: State,
+    descriptors: Record<
+      string,
+      { route?: { key: string | undefined; name: string; params?: object | undefined } }
+    >
+  ) => State;
   /**
    * Transforms the screens declared as children of the navigator before they are rendered.
    *

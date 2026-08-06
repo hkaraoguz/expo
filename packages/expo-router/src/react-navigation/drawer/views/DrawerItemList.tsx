@@ -63,7 +63,7 @@ export function DrawerItemList({ state, navigation, descriptors }: Props) {
 
     return (
       <DrawerItem
-        key={route.key}
+        key={route.name}
         route={route}
         href={buildHref(route.name, route.params)}
         label={drawerLabel !== undefined ? drawerLabel : title !== undefined ? title : route.name}
