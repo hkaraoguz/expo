@@ -4,6 +4,7 @@
 
 ### 🛠 Breaking changes
 
+- Allow descriptors without a `navigation` object in `expo-router/react-navigation` types.
 - Allow descriptor routes without a `key` in `expo-router/react-navigation` types.
 - Unify JS Tabs, TopTabs, Drawer, and headless tabs with NativeTabs - only screens declared in the layout become visible. ([#48499](https://github.com/expo/expo/pull/48499) by [@Ubax](https://github.com/Ubax))
 - Make `href: null` hide JS tabs and make their routes unreachable, redirecting navigation to the initial tab. ([#48499](https://github.com/expo/expo/pull/48499) by [@Ubax](https://github.com/Ubax))
