@@ -12,7 +12,7 @@ import os from 'os';
 import path from 'path';
 
 import { resolveFontPaths, toValidAndroidResourceName } from './utils';
-import type { Font, FontObject } from './withFonts';
+import type { Font, FontDefinition, FontObject, FontVariationAxes } from './withFonts';
 
 const assetsFontsFir = 'app/src/main/assets/fonts';
 const resourcesFontsDir = 'app/src/main/res/font';
@@ -30,7 +30,7 @@ export const withFontsAndroid: ConfigPlugin<Font[]> = (config, fonts) => {
   return config;
 };
 
-type GroupedFontObject = Record<string, FontObject['fontDefinitions']>;
+type GroupedFontObject = Record<string, FontDefinition[]>;
 
 export function groupByFamily(array: FontObject[]): GroupedFontObject {
   return array.reduce<GroupedFontObject>((result, item) => {
@@ -84,10 +84,78 @@ export function assertNoConflictingDefinitions(fontsByFamily: GroupedFontObject)
   }
 }
 
+/**
+ * An OpenType axis tag is four characters. The spec allows any printable ASCII byte, but no axis
+ * uses anything except letters and digits: the registered axes are lowercase, such as `slnt`, and
+ * the axes a font declares for itself are uppercase, such as `GRAD`.
+ *
+ * Holding the tag to that is what keeps a quote out of it. Every tag is wrapped in single quotes to
+ * build the variation settings, so a tag containing one would produce `'a'b'' 400`, and a tag of
+ * four spaces would produce `'    ' 400`.
+ */
+const AXIS_TAG_LENGTH = 4;
+const AXIS_TAG_PATTERN = /^[A-Za-z0-9]{4}$/;
+
+export function assertValidAxes(fontsByFamily: GroupedFontObject) {
+  for (const [fontFamily, definitions] of Object.entries(fontsByFamily)) {
+    for (const definition of definitions) {
+      for (const [tag, value] of Object.entries(definition.axes ?? {})) {
+        const declares = `Font family ${JSON.stringify(fontFamily)} declares the variation axis ${JSON.stringify(tag)} for ${definition.path}`;
+        // Android drops a setting it cannot parse without reporting it, so the font would render at
+        // its default instance with nothing to explain why.
+        const consequence = `Android ignores a variation setting it cannot parse, so the font would silently render at its default instance.`;
+
+        // The type leaves `wght` out, but a config written in JSON is not type checked, so this is
+        // the only place the two ways of setting a weight can be caught.
+        if (tag === 'wght') {
+          throw new Error(
+            `${declares}, which the "weight" field already sets. The weight both selects the face that React Native matches on and instances the font, so setting it twice would let the two drift apart. ` +
+              `Remove the "wght" axis and set "weight" to the value you want.`
+          );
+        }
+
+        if (tag.length !== AXIS_TAG_LENGTH) {
+          throw new Error(
+            `${declares}, which is not a valid OpenType axis tag. An axis tag is exactly four characters, such as "wght", "wdth" or "slnt". ${consequence} ` +
+              `List the axes the font actually declares with a utility such as fontTools: https://fonttools.readthedocs.io/`
+          );
+        }
+
+        if (!AXIS_TAG_PATTERN.test(tag)) {
+          throw new Error(
+            `${declares}, which holds characters that no axis tag uses. A tag is four letters or digits: the axes registered with OpenType are lowercase, such as "slnt" and "wdth", and the axes a font declares for itself are uppercase, such as "GRAD". ${consequence}`
+          );
+        }
+
+        if (typeof value !== 'number' || !Number.isFinite(value)) {
+          throw new Error(
+            `${declares} with the value ${JSON.stringify(value)}, which is not a finite number. ` +
+              `An axis takes a number inside the range the font declares for it, such as -10 for "slnt". ${consequence}`
+          );
+        }
+      }
+    }
+  }
+}
+
+/**
+ * The `app:fontVariationSettings` value for a definition: the declared weight, then the axes the
+ * definition adds. `assertValidAxes` rejects a `wght` axis, so the weight always comes from
+ * `weight` alone.
+ */
+export function formatVariationSettings(definition: FontDefinition) {
+  const axes: FontVariationAxes = { wght: definition.weight, ...definition.axes };
+
+  return Object.entries(axes)
+    .map(([tag, value]) => `'${tag}' ${value}`)
+    .join(', ');
+}
+
 function addXmlFonts(config: ExpoConfig, xmlFontObjects: FontObject[]) {
   const fontsByFamily = groupByFamily(xmlFontObjects);
   assertAndroidCanLoadFonts(fontsByFamily);
   assertNoConflictingDefinitions(fontsByFamily);
+  assertValidAxes(fontsByFamily);
   const fontPaths = Object.values(fontsByFamily).flatMap((definitions) =>
     definitions.map((it) => it.path)
   );
@@ -140,9 +208,9 @@ export function getXmlSpecs(fontsDir: string, xmlFontObjects: GroupedFontObject)
                 'app:font': `@font/${toValidAndroidResourceName(definition.path)}`,
                 'app:fontStyle': definition.style || 'normal',
                 'app:fontWeight': String(definition.weight),
-                // Instances a variable font at the declared weight, so that one file can back
-                // several definitions. Static fonts have no `wght` axis and ignore it.
-                'app:fontVariationSettings': `'wght' ${definition.weight}`,
+                // Instances a variable font at the declared weight and axes, so that one file can
+                // back several definitions. Static fonts declare no axes and ignore this.
+                'app:fontVariationSettings': formatVariationSettings(definition),
               },
             };
           }),

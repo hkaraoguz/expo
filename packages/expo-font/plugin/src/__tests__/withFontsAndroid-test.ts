@@ -1,7 +1,7 @@
 import * as path from 'path';
 
 import { toValidAndroidResourceName } from '../utils';
-import type { FontObject } from '../withFonts';
+import type { FontObject, FontVariationAxes } from '../withFonts';
 import {
   groupByFamily,
   planFontCopies,
@@ -9,6 +9,8 @@ import {
   generateFontManagerCalls,
   assertNoConflictingDefinitions,
   assertAndroidCanLoadFonts,
+  assertValidAxes,
+  formatVariationSettings,
 } from '../withFontsAndroid';
 
 const input = [
@@ -278,10 +280,112 @@ describe('getXmlSpecs', () => {
     expect(getXmlSpecs(fontsDir, groupByFamily(input))).toEqual(expected);
   });
 
+  it('should write extra axes into the variation settings', () => {
+    // One variable file backing an upright and a slanted face of the same family.
+    const oneFileBothStyles = groupByFamily([
+      {
+        fontFamily: 'Roboto Flex',
+        fontDefinitions: [
+          { path: './assets/fonts/RobotoFlex.ttf', weight: 400 },
+          {
+            path: './assets/fonts/RobotoFlex.ttf',
+            weight: 400,
+            style: 'italic',
+            axes: { slnt: -10 },
+          },
+        ],
+      },
+    ]);
+
+    const specs = getXmlSpecs('/path/to/fonts', oneFileBothStyles);
+
+    expect(specs).toHaveLength(1);
+    expect(specs[0]?.xml['font-family'].font).toEqual([
+      {
+        $: {
+          'app:font': '@font/roboto_flex',
+          'app:fontStyle': 'normal',
+          'app:fontWeight': '400',
+          'app:fontVariationSettings': `'wght' 400`,
+        },
+      },
+      {
+        $: {
+          'app:font': '@font/roboto_flex',
+          'app:fontStyle': 'italic',
+          'app:fontWeight': '400',
+          'app:fontVariationSettings': `'wght' 400, 'slnt' -10`,
+        },
+      },
+    ]);
+  });
+
   it('should handle empty input', () => {
     const fontsDir = '/path/to/fonts';
     const result = getXmlSpecs(fontsDir, {});
     expect(result).toHaveLength(0);
+  });
+});
+
+describe('formatVariationSettings', () => {
+  it('appends extra axes after the weight', () => {
+    // A slanted instance of a single variable file, the reason this field exists.
+    expect(
+      formatVariationSettings({
+        path: './RobotoFlex.ttf',
+        weight: 400,
+        style: 'italic',
+        axes: { slnt: -10 },
+      })
+    ).toBe(`'wght' 400, 'slnt' -10`);
+  });
+});
+
+describe('assertValidAxes', () => {
+  // Typed as `FontVariationAxes` so the calls below also assert what the type accepts. `tsc` checks
+  // that: an unused `@ts-expect-error` is itself an error.
+  const declaring = (axes: FontVariationAxes) =>
+    groupByFamily([
+      {
+        fontFamily: 'Roboto Flex',
+        fontDefinitions: [{ path: './RobotoFlex.ttf', weight: 400, axes }],
+      },
+    ]);
+
+  it('should accept registered and custom axis tags', () => {
+    expect(() => assertValidAxes(declaring({ slnt: -10, wdth: 75, opsz: 14 }))).not.toThrow();
+    // A font declares custom axes of its own, so neither the type nor the check can close to the
+    // four axes OpenType registers.
+    expect(() => assertValidAxes(declaring({ GRAD: -50, XOPQ: 96 }))).not.toThrow();
+    expect(() => assertValidAxes(groupByFamily(input))).not.toThrow();
+    // @ts-expect-error an axis takes a number
+    expect(() => assertValidAxes(declaring({ slnt: 'left' }))).toThrow();
+  });
+
+  it('should reject a malformed tag', () => {
+    // An OpenType axis tag is four characters, and no real one is anything but letters and digits.
+    // A quote breaks the quoting `formatVariationSettings` wraps every tag in, turning the output
+    // into `'a'b'' 1`; four spaces name no axis at all. Both sit inside the byte range the spec
+    // allows, so the range alone cannot reject them.
+    expect(() => assertValidAxes(declaring({ slant: -10 }))).toThrow(
+      /"Roboto Flex".+"slant".+four/s
+    );
+    expect(() => assertValidAxes(declaring({ "a'b'": -10 }))).toThrow(/letters or digits/);
+    expect(() => assertValidAxes(declaring({ '    ': -10 }))).toThrow(/letters or digits/);
+  });
+
+  it('should reject a wght axis, which the weight field already sets', () => {
+    // The type leaves `wght` out, but app.json is not type checked, so this is the only guard.
+    expect(() => assertValidAxes(declaring({ wght: 650 }))).toThrow(
+      /"Roboto Flex".+"wght".+"weight" field/s
+    );
+  });
+
+  it('should reject a value that is not a finite number', () => {
+    expect(() => assertValidAxes(declaring({ slnt: Number.NaN }))).toThrow(
+      /"Roboto Flex".+"slnt".+number/s
+    );
+    expect(() => assertValidAxes(declaring({ slnt: Number.POSITIVE_INFINITY }))).toThrow(/"slnt"/);
   });
 });
 
